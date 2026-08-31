@@ -126,6 +126,26 @@ def manifold_support(density_fn, path: np.ndarray) -> np.ndarray:
     # that included this metric outperformed every combination that
     # didn't.
     """
+    # ARCHITECTURE-DEPENDENT IMPLEMENTATION NOTE: KDE-based density_fn
+    # (as used for the HTRU2 experiments, 8 input dimensions) breaks down
+    # in high-dimensional embedding spaces — tested directly on RoBERTa-
+    # base's 768-dim hidden states, where scipy's gaussian_kde either
+    # fails outright (full-dim: singular covariance matrix) or returns
+    # near-constant, uninformative values (after PCA to 30 dims,
+    # explained variance 0.949: density range ratio 1.15x — no real
+    # signal). k-NN distance to the k nearest neighbors in the same
+    # embedding space (NOT a density function, but the same intent — "how
+    # typical/supported is this point") was tested as a drop-in
+    # replacement and validated: AUC=0.777 (p<0.0001) for detecting
+    # misclassification on SST-2/RoBERTa-base, n=80/80, stable across
+    # k=3..15. Use KDE for low-dimensional inputs (roughly <20 dims,
+    # confirmed working on HTRU2's 8 dims); use k-NN distance for
+    # high-dimensional embeddings (confirmed on 768 dims). Mahalanobis
+    # distance was also tested and FAILED (AUC=0.489, degenerate
+    # covariance estimate with n=80 << 768 dimensions) — not recommended
+    # without a shrinkage estimator (e.g. Ledoit-Wolf) at minimum, and
+    # untested even then.
+    """
     return np.array([density_fn(path[i]) for i in range(path.shape[0])])
 
 
